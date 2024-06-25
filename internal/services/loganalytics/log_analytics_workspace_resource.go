@@ -21,6 +21,7 @@ import (
 	"github.com/hashicorp/terraform-provider-azurerm/helpers/azure"
 	"github.com/hashicorp/terraform-provider-azurerm/helpers/tf"
 	"github.com/hashicorp/terraform-provider-azurerm/internal/clients"
+	"github.com/hashicorp/terraform-provider-azurerm/internal/features"
 	"github.com/hashicorp/terraform-provider-azurerm/internal/services/loganalytics/migration"
 	"github.com/hashicorp/terraform-provider-azurerm/internal/services/loganalytics/validate"
 	"github.com/hashicorp/terraform-provider-azurerm/internal/tags"
@@ -31,7 +32,7 @@ import (
 )
 
 func resourceLogAnalyticsWorkspace() *pluginsdk.Resource {
-	return &pluginsdk.Resource{
+	schema := &pluginsdk.Resource{
 		Create: resourceLogAnalyticsWorkspaceCreateUpdate,
 		Read:   resourceLogAnalyticsWorkspaceRead,
 		Update: resourceLogAnalyticsWorkspaceCreateUpdate,
@@ -107,7 +108,6 @@ func resourceLogAnalyticsWorkspace() *pluginsdk.Resource {
 				Optional: true,
 				Computed: true,
 				ValidateFunc: validation.StringInSlice([]string{
-					string(workspaces.WorkspaceSkuNameEnumFree),
 					string(workspaces.WorkspaceSkuNameEnumPerGBTwoZeroOneEight),
 					string(workspaces.WorkspaceSkuNameEnumPerNode),
 					string(workspaces.WorkspaceSkuNameEnumPremium),
@@ -179,6 +179,21 @@ func resourceLogAnalyticsWorkspace() *pluginsdk.Resource {
 			"tags": commonschema.Tags(),
 		},
 	}
+
+	if !features.FourPointOh() {
+		schema.Schema["sku"].ValidateFunc = validation.StringInSlice([]string{
+			string(workspaces.WorkspaceSkuNameEnumFree),
+			string(workspaces.WorkspaceSkuNameEnumPerGBTwoZeroOneEight),
+			string(workspaces.WorkspaceSkuNameEnumPerNode),
+			string(workspaces.WorkspaceSkuNameEnumPremium),
+			string(workspaces.WorkspaceSkuNameEnumStandalone),
+			string(workspaces.WorkspaceSkuNameEnumStandard),
+			string(workspaces.WorkspaceSkuNameEnumCapacityReservation),
+			"Unlimited", // TODO check if this is actually no longer valid, removed in v28.0.0 of the SDK
+		}, false)
+	}
+
+	return schema
 }
 
 func resourceLogAnalyticsWorkspaceCustomDiff(ctx context.Context, d *pluginsdk.ResourceDiff, _ interface{}) error {
