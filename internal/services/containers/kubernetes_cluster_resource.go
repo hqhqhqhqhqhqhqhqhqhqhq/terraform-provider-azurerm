@@ -39,6 +39,7 @@ import (
 	keyVaultParse "github.com/hashicorp/terraform-provider-azurerm/internal/services/keyvault/parse"
 	keyVaultValidate "github.com/hashicorp/terraform-provider-azurerm/internal/services/keyvault/validate"
 	"github.com/hashicorp/terraform-provider-azurerm/internal/tf/pluginsdk"
+	"github.com/hashicorp/terraform-provider-azurerm/internal/tf/set"
 	"github.com/hashicorp/terraform-provider-azurerm/internal/tf/suppress"
 	"github.com/hashicorp/terraform-provider-azurerm/internal/tf/validation"
 	"github.com/hashicorp/terraform-provider-azurerm/internal/timeouts"
@@ -1317,6 +1318,17 @@ func resourceKubernetesCluster() *pluginsdk.Resource {
 						"external_ingress_gateway_enabled": {
 							Type:     pluginsdk.TypeBool,
 							Optional: true,
+						},
+						"revisions": {
+							Type:     pluginsdk.TypeSet,
+							Optional: true,
+							MaxItems: 2,
+							MinItems: 1,
+							Set:      set.HashStringIgnoreCase,
+							Elem: &pluginsdk.Schema{
+								Type:         pluginsdk.TypeString,
+								ValidateFunc: validation.StringIsNotEmpty,
+							},
 						},
 					},
 				},
@@ -4793,6 +4805,10 @@ func expandKubernetesClusterServiceMeshProfile(input []interface{}, existing *ma
 		}
 
 		profile.Istio.Components.IngressGateways = &istioIngressGatewaysList
+
+		if raw["revisions"] != nil {
+			profile.Istio.Revisions = utils.ExpandStringSlice(raw["revisions"].(*pluginsdk.Set).List())
+		}
 	}
 
 	return &profile
@@ -4916,6 +4932,10 @@ func flattenKubernetesClusterAzureServiceMeshProfile(input *managedclusters.Serv
 
 			returnMap[currentIngressKey] = enabled
 		}
+	}
+
+	if input.Istio.Revisions != nil {
+		returnMap["revisions"] = utils.FlattenStringSlice(input.Istio.Revisions)
 	}
 
 	return []interface{}{returnMap}
