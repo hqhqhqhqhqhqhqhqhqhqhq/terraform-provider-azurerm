@@ -7,7 +7,6 @@ import (
 
 	"github.com/hashicorp/go-azure-helpers/lang/pointer"
 	"github.com/hashicorp/go-azure-helpers/lang/response"
-	"github.com/hashicorp/go-azure-helpers/resourcemanager/commonids"
 	"github.com/hashicorp/go-azure-helpers/resourcemanager/commonschema"
 	"github.com/hashicorp/go-azure-helpers/resourcemanager/location"
 	"github.com/hashicorp/go-azure-sdk/resource-manager/astronomer/2023-08-01/organizations"
@@ -28,12 +27,6 @@ type AstroOrganizationModel struct {
 }
 
 type MarketplaceModel struct {
-	Offer              []OfferModel                                `tfschema:"offer"`
-	SubscriptionId     string                                      `tfschema:"subscription_id"`
-	SubscriptionStatus organizations.MarketplaceSubscriptionStatus `tfschema:"subscription_status"`
-}
-
-type OfferModel struct {
 	OfferId     string `tfschema:"offer_id"`
 	PlanId      string `tfschema:"plan_id"`
 	PlanName    string `tfschema:"plan_name"`
@@ -58,10 +51,10 @@ type SingleSignOnModel struct {
 }
 
 type UserModel struct {
-	EmailAddress  string `tfschema:"email_address"`
+	EmailAddress  string `tfschema:"email"`
 	FirstName     string `tfschema:"first_name"`
 	LastName      string `tfschema:"last_name"`
-	PhoneNumber   string `tfschema:"phone_number"`
+	PhoneNumber   string `tfschema:"phone"`
 	PrincipalName string `tfschema:"principal_name"`
 }
 
@@ -100,61 +93,46 @@ func (r AstroOrganizationResource) Arguments() map[string]*pluginsdk.Schema {
 			MaxItems: 1,
 			Elem: &pluginsdk.Resource{
 				Schema: map[string]*pluginsdk.Schema{
-					"subscription_id": {
+					"offer_id": {
 						Type:         pluginsdk.TypeString,
-						Optional:     true,
-						ValidateFunc: validation.IsUUID,
+						Required:     true,
+						ForceNew:     true,
+						ValidateFunc: validation.StringIsNotEmpty,
 					},
 
-					"subscription_status": {
+					"plan_id": {
 						Type:         pluginsdk.TypeString,
-						Optional:     true,
-						ValidateFunc: validation.StringInSlice(organizations.PossibleValuesForMarketplaceSubscriptionStatus(), false),
+						Required:     true,
+						ForceNew:     true,
+						ValidateFunc: validation.StringIsNotEmpty,
 					},
 
-					"offer": {
-						Type:     pluginsdk.TypeList,
-						Required: true,
-						MaxItems: 1,
-						Elem: &pluginsdk.Resource{
-							Schema: map[string]*pluginsdk.Schema{
-								"offer_id": {
-									Type:         pluginsdk.TypeString,
-									Required:     true,
-									ValidateFunc: validation.StringIsNotEmpty,
-								},
+					"plan_name": {
+						Type:         pluginsdk.TypeString,
+						Optional:     true,
+						ForceNew:     true,
+						ValidateFunc: validation.StringIsNotEmpty,
+					},
 
-								"plan_id": {
-									Type:         pluginsdk.TypeString,
-									Required:     true,
-									ValidateFunc: validation.StringIsNotEmpty,
-								},
+					"publisher_id": {
+						Type:         pluginsdk.TypeString,
+						Required:     true,
+						ForceNew:     true,
+						ValidateFunc: validation.StringIsNotEmpty,
+					},
 
-								"plan_name": {
-									Type:         pluginsdk.TypeString,
-									Optional:     true,
-									ValidateFunc: validation.StringIsNotEmpty,
-								},
+					"term_id": {
+						Type:         pluginsdk.TypeString,
+						Optional:     true,
+						ForceNew:     true,
+						ValidateFunc: validation.StringIsNotEmpty,
+					},
 
-								"publisher_id": {
-									Type:         pluginsdk.TypeString,
-									Required:     true,
-									ValidateFunc: validation.StringIsNotEmpty,
-								},
-
-								"term_id": {
-									Type:         pluginsdk.TypeString,
-									Optional:     true,
-									ValidateFunc: validation.StringIsNotEmpty,
-								},
-
-								"term_unit": {
-									Type:         pluginsdk.TypeString,
-									Optional:     true,
-									ValidateFunc: validation.StringIsNotEmpty,
-								},
-							},
-						},
+					"term_unit": {
+						Type:         pluginsdk.TypeString,
+						Optional:     true,
+						ForceNew:     true,
+						ValidateFunc: validation.StringIsNotEmpty,
 					},
 				},
 			},
@@ -162,67 +140,65 @@ func (r AstroOrganizationResource) Arguments() map[string]*pluginsdk.Schema {
 
 		"partner_organization": {
 			Type:     pluginsdk.TypeList,
-			Optional: true,
+			Required: true,
 			MaxItems: 1,
 			Elem: &pluginsdk.Resource{
 				Schema: map[string]*pluginsdk.Schema{
 					"organization_id": {
-						Type:         pluginsdk.TypeString,
-						Optional:     true,
-						ValidateFunc: validation.StringIsNotEmpty,
+						Type:     pluginsdk.TypeString,
+						Computed: true,
 					},
 
 					"organization_name": {
 						Type:         pluginsdk.TypeString,
-						Optional:     true,
-						ValidateFunc: validate.OrganizationAndOrganizationWorkspaceName,
+						Required:     true,
+						ValidateFunc: validate.OrganizationAndWorkspaceName,
 					},
 
 					"single_sign_on": {
 						Type:     pluginsdk.TypeList,
-						Optional: true,
+						Required: true,
 						MaxItems: 1,
 						Elem: &pluginsdk.Resource{
 							Schema: map[string]*pluginsdk.Schema{
 								"aad_domains": {
 									Type:     pluginsdk.TypeList,
-									Required: true, // Newly updated
+									Required: true,
 									Elem: &pluginsdk.Schema{
-										Type: pluginsdk.TypeString,
+										Type:         pluginsdk.TypeString,
+										ValidateFunc: validation.StringIsNotEmpty,
 									},
 								},
 
 								"enterprise_app_id": {
 									Type:         pluginsdk.TypeString,
 									Optional:     true,
+									ForceNew:     true,
 									ValidateFunc: validation.StringIsNotEmpty,
 								},
 
 								"single_sign_on_state": {
-									Type:         pluginsdk.TypeString,
-									Optional:     true,
-									ValidateFunc: validation.StringInSlice(organizations.PossibleValuesForSingleSignOnStates(), false),
+									Type:     pluginsdk.TypeString,
+									Computed: true,
 								},
 
 								"single_sign_on_url": {
-									Type:         pluginsdk.TypeString,
-									Optional:     true,
-									ValidateFunc: validation.StringIsNotEmpty,
+									Type:     pluginsdk.TypeString,
+									Computed: true,
 								},
 							},
 						},
 					},
 
 					"workspace_id": {
-						Type:         pluginsdk.TypeString,
-						Optional:     true,
-						ValidateFunc: validation.StringIsNotEmpty,
+						Type:     pluginsdk.TypeString,
+						Computed: true,
 					},
 
 					"workspace_name": {
 						Type:         pluginsdk.TypeString,
-						Optional:     true,
-						ValidateFunc: validate.OrganizationAndOrganizationWorkspaceName,
+						Required:     true,
+						ValidateFunc: validate.OrganizationAndWorkspaceName,
 					},
 				},
 			},
@@ -230,11 +206,11 @@ func (r AstroOrganizationResource) Arguments() map[string]*pluginsdk.Schema {
 
 		"user": {
 			Type:     pluginsdk.TypeList,
-			Required: true,
+			Optional: true,
 			MaxItems: 1,
 			Elem: &pluginsdk.Resource{
 				Schema: map[string]*pluginsdk.Schema{
-					"email_address": {
+					"email": {
 						Type:         pluginsdk.TypeString,
 						Required:     true,
 						ValidateFunc: validate.UserEmailAddress,
@@ -252,7 +228,7 @@ func (r AstroOrganizationResource) Arguments() map[string]*pluginsdk.Schema {
 						ValidateFunc: validation.StringIsNotEmpty,
 					},
 
-					"phone_number": {
+					"phone": {
 						Type:         pluginsdk.TypeString,
 						Optional:     true,
 						ValidateFunc: validation.StringIsNotEmpty,
@@ -260,7 +236,7 @@ func (r AstroOrganizationResource) Arguments() map[string]*pluginsdk.Schema {
 
 					"principal_name": {
 						Type:         pluginsdk.TypeString,
-						Optional:     true,
+						Required:     true,
 						ValidateFunc: validation.StringIsNotEmpty,
 					},
 				},
@@ -313,6 +289,7 @@ func (r AstroOrganizationResource) Create() sdk.ResourceFunc {
 			}
 
 			metadata.SetID(id)
+
 			return nil
 		},
 	}
@@ -320,7 +297,6 @@ func (r AstroOrganizationResource) Create() sdk.ResourceFunc {
 
 func (r AstroOrganizationResource) Update() sdk.ResourceFunc {
 	return sdk.ResourceFunc{
-		Timeout: 30 * time.Minute,
 		Func: func(ctx context.Context, metadata sdk.ResourceMetaData) error {
 			client := metadata.Client.Astro.OrganizationsClient
 
@@ -369,6 +345,8 @@ func (r AstroOrganizationResource) Update() sdk.ResourceFunc {
 
 			return nil
 		},
+		DiffFunc: nil,
+		Timeout:  30 * time.Minute,
 	}
 }
 
@@ -395,17 +373,13 @@ func (r AstroOrganizationResource) Read() sdk.ResourceFunc {
 			state := AstroOrganizationModel{
 				Name:              id.OrganizationName,
 				ResourceGroupName: id.ResourceGroupName,
-				//Location:          location.Normalize(resp.Model.Location),
 			}
 
 			if model := resp.Model; model != nil {
 				state.Location = location.Normalize(model.Location)
 
 				if properties := model.Properties; properties != nil {
-					state.Marketplace, err = flattenMarketplaceModel(properties.Marketplace)
-					if err != nil {
-						return fmt.Errorf("flattening `marketplace`: %+v", err)
-					}
+					state.Marketplace = flattenMarketplaceModel(properties.Marketplace)
 
 					state.PartnerOrganization = flattenPartnerOrganizationModel(properties.PartnerOrganizationProperties)
 
@@ -447,32 +421,31 @@ func expandMarketplaceModel(inputList []MarketplaceModel) organizations.LiftrBas
 
 	input := pointer.To(inputList[0])
 
-	output := organizations.LiftrBaseMarketplaceDetails{
-		OfferDetails:       expandOfferModel(input.Offer),
-		SubscriptionId:     pointer.To(input.SubscriptionId),
-		SubscriptionStatus: pointer.To(input.SubscriptionStatus),
+	return organizations.LiftrBaseMarketplaceDetails{
+		OfferDetails: organizations.LiftrBaseOfferDetails{
+			OfferId:     input.OfferId,
+			PlanId:      input.PlanId,
+			PlanName:    pointer.To(input.PlanName),
+			PublisherId: input.PublisherId,
+			TermId:      pointer.To(input.TermId),
+			TermUnit:    pointer.To(input.TermUnit),
+		},
 	}
-
-	return output
 }
 
-func expandOfferModel(inputList []OfferModel) organizations.LiftrBaseOfferDetails {
-	if len(inputList) == 0 {
-		return organizations.LiftrBaseOfferDetails{}
+func flattenMarketplaceModel(input organizations.LiftrBaseMarketplaceDetails) []MarketplaceModel {
+	var outputList []MarketplaceModel
+
+	output := MarketplaceModel{
+		OfferId:     input.OfferDetails.OfferId,
+		PublisherId: input.OfferDetails.PublisherId,
+		PlanId:      input.OfferDetails.PlanId,
+		PlanName:    pointer.From(input.OfferDetails.PlanName),
+		TermId:      pointer.From(input.OfferDetails.TermId),
+		TermUnit:    pointer.From(input.OfferDetails.TermUnit),
 	}
 
-	input := pointer.To(inputList[0])
-
-	output := organizations.LiftrBaseOfferDetails{
-		OfferId:     input.OfferId,
-		PlanId:      input.PlanId,
-		PlanName:    pointer.To(input.PlanName),
-		PublisherId: input.PublisherId,
-		TermId:      pointer.To(input.TermId),
-		TermUnit:    pointer.To(input.TermUnit),
-	}
-
-	return output
+	return append(outputList, output)
 }
 
 func expandPartnerOrganizationModel(inputList []PartnerOrganizationModel) *organizations.LiftrBaseDataPartnerOrganizationProperties {
@@ -483,10 +456,8 @@ func expandPartnerOrganizationModel(inputList []PartnerOrganizationModel) *organ
 	input := pointer.To(inputList[0])
 
 	output := organizations.LiftrBaseDataPartnerOrganizationProperties{
-		OrganizationId:         pointer.To(input.OrganizationId),
 		OrganizationName:       input.OrganizationName,
 		SingleSignOnProperties: expandSingleSignOnModel(input.SingleSignOn),
-		WorkspaceId:            pointer.To(input.WorkspaceId),
 		WorkspaceName:          pointer.To(input.WorkspaceName),
 	}
 
@@ -501,10 +472,8 @@ func expandSingleSignOnModel(inputList []SingleSignOnModel) *organizations.Liftr
 	input := pointer.To(inputList[0])
 
 	output := organizations.LiftrBaseSingleSignOnProperties{
-		AadDomains:        pointer.To(input.AadDomains),
-		EnterpriseAppId:   pointer.To(input.EnterpriseAppId),
-		SingleSignOnState: pointer.To(input.SingleSignOnState),
-		SingleSignOnURL:   pointer.To(input.SingleSignOnUrl),
+		AadDomains:      pointer.To(input.AadDomains),
+		EnterpriseAppId: pointer.To(input.EnterpriseAppId),
 	}
 
 	return &output
@@ -526,44 +495,6 @@ func expandUserModel(inputList []UserModel) organizations.LiftrBaseUserDetails {
 	}
 
 	return output
-}
-
-func flattenMarketplaceModel(input organizations.LiftrBaseMarketplaceDetails) ([]MarketplaceModel, error) {
-	var outputList []MarketplaceModel
-
-	output := MarketplaceModel{
-		Offer:              flattenOfferModel(&input.OfferDetails),
-		SubscriptionStatus: pointer.From(input.SubscriptionStatus),
-	}
-
-	// validate subscriptionId returned from API
-	if v := pointer.From(input.SubscriptionId); v != "" {
-		id, err := commonids.ParseSubscriptionID(v)
-		if err != nil {
-			return nil, fmt.Errorf("parsing `subscription_id`: %+v", err)
-		}
-
-		output.SubscriptionId = id.SubscriptionId
-	}
-
-	return append(outputList, output), nil
-}
-
-func flattenOfferModel(input *organizations.LiftrBaseOfferDetails) []OfferModel {
-	var outputList []OfferModel
-	if input == nil {
-		return outputList
-	}
-	output := OfferModel{
-		OfferId:     input.OfferId,
-		PlanId:      input.PlanId,
-		PlanName:    pointer.From(input.PlanName),
-		PublisherId: input.PublisherId,
-		TermId:      pointer.From(input.TermId),
-		TermUnit:    pointer.From(input.TermUnit),
-	}
-
-	return append(outputList, output)
 }
 
 func flattenPartnerOrganizationModel(input *organizations.LiftrBaseDataPartnerOrganizationProperties) []PartnerOrganizationModel {

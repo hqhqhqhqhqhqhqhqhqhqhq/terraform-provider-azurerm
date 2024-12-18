@@ -5,7 +5,7 @@ import (
 	"regexp"
 )
 
-func OrganizationAndOrganizationWorkspaceName(v interface{}, k string) (warnings []string, errors []error) {
+func OrganizationAndWorkspaceName(v interface{}, k string) (warnings []string, errors []error) {
 	value := v.(string)
 
 	if len(value) > 50 || len(value) < 1 {

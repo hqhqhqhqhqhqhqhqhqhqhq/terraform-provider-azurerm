@@ -85,8 +85,7 @@ func (r AstroOrganizationResource) Exists(ctx context.Context, clients *clients.
 		return nil, err
 	}
 
-	client := clients.Astro.OrganizationsClient
-	resp, err := client.Get(ctx, *id)
+	resp, err := clients.Astro.OrganizationsClient.Get(ctx, *id)
 	if err != nil {
 		if response.WasNotFound(resp.HttpResponse) {
 			return nil, fmt.Errorf("%s does not exist", id)
@@ -102,12 +101,16 @@ provider "azurerm" {
   features {}
 }
 
+provider "azuread" {}
+
 resource "azurerm_resource_group" "test" {
-  name     = "acctest-rg-%d"
-  location = "%s"
+  name     = "acctest-rg-%[1]d"
+  location = "%[2]s"
 }
 
-data "azurerm_subscription" "current" {}
+data "azuread_domains" "test" {
+	only_initial = true
+}
 
 `, data.RandomInteger, data.Locations.Primary)
 }
@@ -115,167 +118,145 @@ data "azurerm_subscription" "current" {}
 func (r AstroOrganizationResource) basic(data acceptance.TestData) string {
 	template := r.template(data)
 	return fmt.Sprintf(`
-%s
+%[1]s
 
 resource "azurerm_astro_organization" "test" {
-  name                = "acctest-ao-%d"
+  name                = "acctest-ao-%[2]s"
   resource_group_name = azurerm_resource_group.test.name
-  location            = "%s"
+  location            = azurerm_resource_group.test.location
   marketplace {
-    subscription_id     = data.azurerm_subscription.current.subscription_id
-    subscription_status = "Subscribed"
-    offer {
-      offer_id     = "example-offer-id"
-      plan_id      = "example-plan-id"
-      plan_name    = "example-plan-name"
-      publisher_id = "example-publisher-id"
-      term_id      = "example-term-id"
-      term_unit    = "example-term-unit"
-    }
+    offer_id     = "astro"
+    plan_id      = "astro-paygo"
+    plan_name    = "Monthly Pay-As-You-Go"
+    publisher_id = "astronomer1591719760654"
+    term_id      = "gmz7xq9ge3py"
+    term_unit    = "1-Month"
   }
   partner_organization {
-    single_sign_on {
-      aad_domains          = ["mpliftrlogz20210811outlook.onmicrosoft.com"]
-	}
+    organization_name = "test-organization-%[2]s"
+	single_sign_on {
+      aad_domains = data.azuread_domains.test.domains.*.domain_name
+    }
+	workspace_name    = "test-workspace-%[2]s"
   }
   user {
-    email_address = "user@example.com"
-    first_name    = "John"
-    last_name     = "Doe"
-    phone_number  = "+1234567890"
+    email = "user@example.com"
+    first_name = "John"
+    last_name = "Doe"
     principal_name = "john.doe@example.com"
   }
 }
-`, template, data.RandomInteger, data.Locations.Primary)
+`, template, data.RandomString)
 }
 
 func (r AstroOrganizationResource) requiresImport(data acceptance.TestData) string {
 	config := r.basic(data)
 	return fmt.Sprintf(`
-%s
+%[1]s
 
 resource "azurerm_astro_organization" "import" {
   name                = azurerm_astro_organization.test.name
   resource_group_name = azurerm_resource_group.test.name
-  location            = "%s"
+  location            = azurerm_resource_group.test.location
   marketplace {
-    subscription_id     = data.azurerm_subscription.current.subscription_id
-    subscription_status = "Subscribed"
-    offer {
-      offer_id     = "example-offer-id"
-      plan_id      = "example-plan-id"
-      plan_name    = "example-plan-name"
-      publisher_id = "example-publisher-id"
-      term_id      = "example-term-id"
-      term_unit    = "example-term-unit"
-    }
+    offer_id     = "astro"
+    plan_id      = "astro-paygo"
+    plan_name    = "Monthly Pay-As-You-Go"
+    publisher_id = "astronomer1591719760654"
+    term_id      = "gmz7xq9ge3py"
+    term_unit    = "1-Month"
   }
   partner_organization {
-    single_sign_on {
-      aad_domains          = ["mpliftrlogz20210811outlook.onmicrosoft.com"]
-	}
+    organization_name = "test-organization-%[2]s"
+	single_sign_on {
+      aad_domains = data.azuread_domains.test.domains.*.domain_name
+    }
+	workspace_name    = "test-workspace-%[2]s"
   }
   user {
-    email_address = "user@example.com"
-    first_name    = "John"
-    last_name     = "Doe"
-    phone_number  = "+1234567890"
+    email = "user@example.com"
+    first_name = "John"
+    last_name = "Doe"
     principal_name = "john.doe@example.com"
   }
 }
-`, config, data.Locations.Primary)
+`, config, data.RandomString)
 }
 
 func (r AstroOrganizationResource) complete(data acceptance.TestData) string {
 	template := r.template(data)
 	return fmt.Sprintf(`
-%s
+%[1]s
 
 resource "azurerm_astro_organization" "test" {
-  name                = "acctest-ao-%d"
+  name                = "acctest-ao-%[2]s"
   resource_group_name = azurerm_resource_group.test.name
-  location            = "%s"
+  location            = azurerm_resource_group.test.location
   marketplace {
-    subscription_id     = data.azurerm_subscription.current.subscription_id
-    subscription_status = "Subscribed"
-    offer {
-      offer_id     = "example-offer-id"
-      plan_id      = "example-plan-id"
-      plan_name    = "example-plan-name"
-      publisher_id = "example-publisher-id"
-      term_id      = "example-term-id"
-      term_unit    = "example-term-unit"
-    }
+    offer_id     = "astro"
+    plan_id      = "astro-paygo"
+    plan_name    = "Monthly Pay-As-You-Go"
+    publisher_id = "astronomer1591719760654"
+    term_id      = "gmz7xq9ge3py"
+    term_unit    = "1-Month"
   }
   partner_organization {
-    organization_id   = "example-organization-id"
-    organization_name = "example-organization-name"
-    workspace_id      = "example-workspace-id"
-    workspace_name    = "example-workspace-name"
+    organization_name = "test-organization-%[2]s"
     single_sign_on {
       enterprise_app_id    = "00000000-0000-0000-0000-000000000000"
-      single_sign_on_state = "Enable"
-      single_sign_on_url   = "https://example.com/sso"
-      aad_domains          = ["mpliftrlogz20210811outlook.onmicrosoft.com"]
+      aad_domains          = data.azuread_domains.test.domains.*.domain_name
     }
+    workspace_name    = "test-workspace-%[2]s"
   }
   user {
-    email_address = "user@example.com"
-    first_name    = "John"
-    last_name     = "Doe"
-    phone_number  = "+1234567890"
+    email = "user@example.com"
+    first_name = "John"
+    last_name = "Doe"
+    phone = "+1234567890"
     principal_name = "john.doe@example.com"
   }
   tags = {
     environment = "production"
   }
 }
-`, template, data.RandomInteger, data.Locations.Primary)
+`, template, data.RandomString)
 }
 
 func (r AstroOrganizationResource) update(data acceptance.TestData) string {
 	template := r.template(data)
 	return fmt.Sprintf(`
-%s
+%[1]s
 
 resource "azurerm_astro_organization" "test" {
-  name                = "acctest-ao-%d"
+  name                = "acctest-ao-%[2]s"
   resource_group_name = azurerm_resource_group.test.name
-  location            = "%s"
+  location            = azurerm_resource_group.test.location
   marketplace {
-    subscription_id     = data.azurerm_subscription.current.subscription_id
-    subscription_status = "Subscribed"
-    offer {
-      offer_id     = "example-offer-id"
-      plan_id      = "example-plan-id"
-      plan_name    = "example-plan-name"
-      publisher_id = "example-publisher-id"
-      term_id      = "example-term-id"
-      term_unit    = "example-term-unit"
-    }
+    offer_id     = "astro"
+    plan_id      = "astro-paygo"
+    plan_name    = "Monthly Pay-As-You-Go"
+    publisher_id = "astronomer1591719760654"
+    term_id      = "gmz7xq9ge3py"
+    term_unit    = "1-Month"
   }
   partner_organization {
-    organization_id   = "updated-organization-id"
-    organization_name = "updated-organization-name"
-    workspace_id      = "updated-workspace-id"
-    workspace_name    = "updated-workspace-name"
+    organization_name = "updated-organization-%[2]s"
     single_sign_on {
-      enterprise_app_id    = "updated-enterprise-app-id"
-      single_sign_on_state = "Enable"
-      single_sign_on_url   = "https://updated-example.com/sso"
-      aad_domains          = ["mpliftrlogz20210811outlook.onmicrosoft.com"]
+      enterprise_app_id    = "00000000-0000-0000-0000-000000000000"
+      aad_domains          = data.azuread_domains.test.domains.*.domain_name
     }
+    workspace_name    = "updated-workspace-%[2]s"
   }
   user {
-    email_address = "updated_user@example.com"
-    first_name    = "Jane"
-    last_name     = "Smith"
-    phone_number  = "+0987654321"
+    email = "updated_user@example.com"
+    first_name = "Jane"
+    last_name = "Smith"
+    phone = "+0987654321"
     principal_name = "jane.smith@example.com"
   }
   tags = {
     environment = "staging"
   }
 }
-`, template, data.RandomInteger, data.Locations.Primary)
+`, template, data.RandomString)
 }
