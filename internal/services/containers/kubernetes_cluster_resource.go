@@ -94,6 +94,23 @@ func resourceKubernetesCluster() *pluginsdk.Resource {
 			pluginsdk.ForceNewIfChange("network_profile.0.network_data_plane", func(ctx context.Context, old, new, meta interface{}) bool {
 				return old != ""
 			}),
+			pluginsdk.ForceNewIfChange("network_profile.0.network_plugin", func(ctx context.Context, old, new, meta interface{}) bool {
+				oldPlugin := old.(string)
+				newPlugin := new.(string)
+
+				// Allow migration from kubenet to azure (CNI) - this is supported by Azure AKS
+				if oldPlugin == "kubenet" && newPlugin == "azure" {
+					return false
+				}
+
+				// Allow migration from azure to kubenet (though less common)
+				if oldPlugin == "azure" && newPlugin == "kubenet" {
+					return false
+				}
+
+				// Force recreation for other plugin changes that are not supported
+				return oldPlugin != newPlugin
+			}),
 			func(ctx context.Context, d *schema.ResourceDiff, meta interface{}) error {
 				if d.HasChange("oidc_issuer_enabled") {
 					d.SetNewComputed("oidc_issuer_url")
@@ -992,14 +1009,12 @@ func resourceKubernetesCluster() *pluginsdk.Resource {
 				Type:     pluginsdk.TypeList,
 				Optional: true,
 				Computed: true,
-				ForceNew: true,
 				MaxItems: 1,
 				Elem: &pluginsdk.Resource{
 					Schema: map[string]*pluginsdk.Schema{
 						"network_plugin": {
 							Type:     pluginsdk.TypeString,
 							Required: true,
-							ForceNew: true,
 							ValidateFunc: validation.StringInSlice([]string{
 								string(managedclusters.NetworkPluginAzure),
 								string(managedclusters.NetworkPluginKubenet),
