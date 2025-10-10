@@ -430,6 +430,113 @@ func resourceKubernetesClusterNodePoolSchema() map[string]*pluginsdk.Schema {
 			Type:     pluginsdk.TypeBool,
 			Optional: true,
 		},
+
+		"gateway_profile": {
+			Type:     pluginsdk.TypeList,
+			Optional: true,
+			MaxItems: 1,
+			Elem: &pluginsdk.Resource{
+				Schema: map[string]*pluginsdk.Schema{
+					"public_ip_prefix_size": {
+						Type:         pluginsdk.TypeInt,
+						Optional:     true,
+						Default:      31,
+						ValidateFunc: validation.IntBetween(28, 31),
+						Description:  "The Gateway agent pool associates one public IPPrefix for each static egress gateway to provide public egress. The size of Public IPPrefix should be selected by the user. Each node in the agent pool is assigned with one IP from the IPPrefix. The IPPrefix size thus serves as a cap on the size of the Gateway agent pool. Due to Azure public IPPrefix size limitation, the valid value range is [28, 31] (/31 = 2 nodes/IPs, /30 = 4 nodes/IPs, /29 = 8 nodes/IPs, /28 = 16 nodes/IPs). The default value is 31.",
+					},
+				},
+			},
+		},
+
+		"pod_ip_allocation_mode": {
+			Type:     pluginsdk.TypeString,
+			Optional: true,
+			Default:  string(agentpools.PodIPAllocationModeDynamicIndividual),
+			ValidateFunc: validation.StringInSlice([]string{
+				string(agentpools.PodIPAllocationModeDynamicIndividual),
+				string(agentpools.PodIPAllocationModeStaticBlock),
+			}, false),
+			Description: "Pod IP Allocation Mode. The IP allocation mode for pods in the agent pool. Must be used with podSubnetId. The default is 'DynamicIndividual'.",
+		},
+
+		"security_profile": {
+			Type:     pluginsdk.TypeList,
+			Optional: true,
+			MaxItems: 1,
+			Elem: &pluginsdk.Resource{
+				Schema: map[string]*pluginsdk.Schema{
+					"enable_vtpm": {
+						Type:        pluginsdk.TypeBool,
+						Optional:    true,
+						Default:     false,
+						Description: "vTPM is a Trusted Launch feature for configuring a dedicated secure vault for keys and measurements held locally on the node. For more details, see aka.ms/aks/trustedlaunch. If not specified, the default is false.",
+					},
+					"enable_secure_boot": {
+						Type:        pluginsdk.TypeBool,
+						Optional:    true,
+						Default:     false,
+						Description: "Secure Boot is a feature of Trusted Launch which ensures that only signed operating systems and drivers can boot. For more details, see aka.ms/aks/trustedlaunch. If not specified, the default is false.",
+					},
+				},
+			},
+		},
+
+		"virtual_machine_profile": {
+			Type:     pluginsdk.TypeList,
+			Optional: true,
+			MaxItems: 1,
+			Elem: &pluginsdk.Resource{
+				Schema: map[string]*pluginsdk.Schema{
+					"scale": {
+						Type:     pluginsdk.TypeList,
+						Optional: true,
+						MaxItems: 1,
+						Elem: &pluginsdk.Resource{
+							Schema: map[string]*pluginsdk.Schema{
+								"manual": {
+									Type:     pluginsdk.TypeList,
+									Optional: true,
+									Elem: &pluginsdk.Resource{
+										Schema: map[string]*pluginsdk.Schema{
+											"size": {
+												Type:        pluginsdk.TypeString,
+												Required:    true,
+												Description: "VM size that AKS will use when creating and scaling e.g. 'Standard_E4s_v3', 'Standard_E16s_v3' or 'Standard_D16s_v5'.",
+											},
+											"count": {
+												Type:         pluginsdk.TypeInt,
+												Required:     true,
+												ValidateFunc: validation.IntAtLeast(0),
+												Description:  "Number of nodes.",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+
+		"virtual_machine_nodes_status": {
+			Type:     pluginsdk.TypeList,
+			Computed: true,
+			Elem: &pluginsdk.Resource{
+				Schema: map[string]*pluginsdk.Schema{
+					"size": {
+						Type:        pluginsdk.TypeString,
+						Computed:    true,
+						Description: "The VM size of the agents used to host this group of nodes.",
+					},
+					"count": {
+						Type:        pluginsdk.TypeInt,
+						Computed:    true,
+						Description: "Number of nodes.",
+					},
+				},
+			},
+		},
 	}
 
 	return s
@@ -690,6 +797,22 @@ func resourceKubernetesClusterNodePoolCreate(d *pluginsdk.ResourceData, meta int
 		profile.NetworkProfile = expandAgentPoolNetworkProfile(networkProfile)
 	}
 
+	if gatewayProfile := d.Get("gateway_profile").([]interface{}); len(gatewayProfile) > 0 {
+		profile.GatewayProfile = expandAgentPoolGatewayProfile(gatewayProfile)
+	}
+
+	if podIPAllocationMode := d.Get("pod_ip_allocation_mode").(string); podIPAllocationMode != "" {
+		profile.PodIPAllocationMode = pointer.To(agentpools.PodIPAllocationMode(podIPAllocationMode))
+	}
+
+	if securityProfile := d.Get("security_profile").([]interface{}); len(securityProfile) > 0 {
+		profile.SecurityProfile = expandAgentPoolSecurityProfile(securityProfile)
+	}
+
+	if virtualMachineProfile := d.Get("virtual_machine_profile").([]interface{}); len(virtualMachineProfile) > 0 {
+		profile.VirtualMachinesProfile = expandAgentPoolVirtualMachinesProfile(virtualMachineProfile)
+	}
+
 	if snapshotId := d.Get("snapshot_id").(string); snapshotId != "" {
 		profile.CreationData = &agentpools.CreationData{
 			SourceResourceId: pointer.To(snapshotId),
@@ -919,6 +1042,22 @@ func resourceKubernetesClusterNodePoolUpdate(d *pluginsdk.ResourceData, meta int
 
 	if d.HasChange("node_network_profile") {
 		props.NetworkProfile = expandAgentPoolNetworkProfile(d.Get("node_network_profile").([]interface{}))
+	}
+
+	if d.HasChange("gateway_profile") {
+		props.GatewayProfile = expandAgentPoolGatewayProfile(d.Get("gateway_profile").([]interface{}))
+	}
+
+	if d.HasChange("pod_ip_allocation_mode") {
+		props.PodIPAllocationMode = pointer.To(agentpools.PodIPAllocationMode(d.Get("pod_ip_allocation_mode").(string)))
+	}
+
+	if d.HasChange("security_profile") {
+		props.SecurityProfile = expandAgentPoolSecurityProfile(d.Get("security_profile").([]interface{}))
+	}
+
+	if d.HasChange("virtual_machine_profile") {
+		props.VirtualMachinesProfile = expandAgentPoolVirtualMachinesProfile(d.Get("virtual_machine_profile").([]interface{}))
 	}
 
 	if d.HasChange("zones") {
@@ -1230,6 +1369,26 @@ func resourceKubernetesClusterNodePoolRead(d *pluginsdk.ResourceData, meta inter
 
 		if err := d.Set("node_network_profile", flattenAgentPoolNetworkProfile(props.NetworkProfile)); err != nil {
 			return fmt.Errorf("setting `node_network_profile`: %+v", err)
+		}
+
+		if err := d.Set("gateway_profile", flattenAgentPoolGatewayProfile(props.GatewayProfile)); err != nil {
+			return fmt.Errorf("setting `gateway_profile`: %+v", err)
+		}
+
+		if props.PodIPAllocationMode != nil {
+			d.Set("pod_ip_allocation_mode", string(*props.PodIPAllocationMode))
+		}
+
+		if err := d.Set("security_profile", flattenAgentPoolSecurityProfile(props.SecurityProfile)); err != nil {
+			return fmt.Errorf("setting `security_profile`: %+v", err)
+		}
+
+		if err := d.Set("virtual_machine_profile", flattenAgentPoolVirtualMachinesProfile(props.VirtualMachinesProfile)); err != nil {
+			return fmt.Errorf("setting `virtual_machine_profile`: %+v", err)
+		}
+
+		if err := d.Set("virtual_machine_nodes_status", flattenAgentPoolVirtualMachineNodesStatus(props.VirtualMachineNodesStatus)); err != nil {
+			return fmt.Errorf("setting `virtual_machine_nodes_status`: %+v", err)
 		}
 	}
 
@@ -1850,4 +2009,212 @@ func flattenAgentPoolNetworkProfileNodePublicIPTags(input *[]agentpools.IPTag) m
 	}
 
 	return out
+}
+
+func expandAgentPoolGatewayProfile(input []interface{}) *agentpools.AgentPoolGatewayProfile {
+	if len(input) == 0 || input[0] == nil {
+		return nil
+	}
+
+	v := input[0].(map[string]interface{})
+	result := &agentpools.AgentPoolGatewayProfile{}
+
+	if publicIPPrefixSize := v["public_ip_prefix_size"].(int); publicIPPrefixSize > 0 {
+		result.PublicIPPrefixSize = pointer.To(int64(publicIPPrefixSize))
+	}
+
+	return result
+}
+
+func expandAgentPoolSecurityProfile(input []interface{}) *agentpools.AgentPoolSecurityProfile {
+	if len(input) == 0 || input[0] == nil {
+		return nil
+	}
+
+	v := input[0].(map[string]interface{})
+	result := &agentpools.AgentPoolSecurityProfile{}
+
+	if enableVTPM := v["enable_vtpm"].(bool); enableVTPM {
+		result.EnableVTPM = pointer.To(enableVTPM)
+	}
+
+	if enableSecureBoot := v["enable_secure_boot"].(bool); enableSecureBoot {
+		result.EnableSecureBoot = pointer.To(enableSecureBoot)
+	}
+
+	return result
+}
+
+func expandAgentPoolVirtualMachinesProfile(input []interface{}) *agentpools.VirtualMachinesProfile {
+	if len(input) == 0 || input[0] == nil {
+		return nil
+	}
+
+	v := input[0].(map[string]interface{})
+	result := &agentpools.VirtualMachinesProfile{}
+
+	if scale := v["scale"].([]interface{}); len(scale) > 0 {
+		result.Scale = expandAgentPoolScaleProfile(scale)
+	}
+
+	return result
+}
+
+func expandAgentPoolScaleProfile(input []interface{}) *agentpools.ScaleProfile {
+	if len(input) == 0 || input[0] == nil {
+		return nil
+	}
+
+	v := input[0].(map[string]interface{})
+	result := &agentpools.ScaleProfile{}
+
+	if manual := v["manual"].([]interface{}); len(manual) > 0 {
+		result.Manual = expandAgentPoolManualScaleProfile(manual)
+	}
+
+	return result
+}
+
+func expandAgentPoolManualScaleProfile(input []interface{}) *[]agentpools.ManualScaleProfile {
+	if len(input) == 0 {
+		return nil
+	}
+
+	result := make([]agentpools.ManualScaleProfile, 0)
+	for _, v := range input {
+		raw := v.(map[string]interface{})
+		profile := agentpools.ManualScaleProfile{
+			Size:  pointer.To(raw["size"].(string)),
+			Count: pointer.To(int64(raw["count"].(int))),
+		}
+		result = append(result, profile)
+	}
+
+	return &result
+}
+
+func flattenAgentPoolGatewayProfile(input *agentpools.AgentPoolGatewayProfile) []interface{} {
+	if input == nil {
+		return []interface{}{}
+	}
+
+	publicIPPrefixSize := 31
+	if input.PublicIPPrefixSize != nil {
+		publicIPPrefixSize = int(*input.PublicIPPrefixSize)
+	}
+
+	return []interface{}{
+		map[string]interface{}{
+			"public_ip_prefix_size": publicIPPrefixSize,
+		},
+	}
+}
+
+func flattenAgentPoolSecurityProfile(input *agentpools.AgentPoolSecurityProfile) []interface{} {
+	if input == nil {
+		return []interface{}{}
+	}
+
+	enableVTPM := false
+	if input.EnableVTPM != nil {
+		enableVTPM = *input.EnableVTPM
+	}
+
+	enableSecureBoot := false
+	if input.EnableSecureBoot != nil {
+		enableSecureBoot = *input.EnableSecureBoot
+	}
+
+	return []interface{}{
+		map[string]interface{}{
+			"enable_vtpm":        enableVTPM,
+			"enable_secure_boot": enableSecureBoot,
+		},
+	}
+}
+
+func flattenAgentPoolVirtualMachinesProfile(input *agentpools.VirtualMachinesProfile) []interface{} {
+	if input == nil {
+		return []interface{}{}
+	}
+
+	scale := []interface{}{}
+	if input.Scale != nil {
+		scale = flattenAgentPoolScaleProfile(input.Scale)
+	}
+
+	return []interface{}{
+		map[string]interface{}{
+			"scale": scale,
+		},
+	}
+}
+
+func flattenAgentPoolScaleProfile(input *agentpools.ScaleProfile) []interface{} {
+	if input == nil {
+		return []interface{}{}
+	}
+
+	manual := []interface{}{}
+	if input.Manual != nil {
+		manual = flattenAgentPoolManualScaleProfile(input.Manual)
+	}
+
+	return []interface{}{
+		map[string]interface{}{
+			"manual": manual,
+		},
+	}
+}
+
+func flattenAgentPoolManualScaleProfile(input *[]agentpools.ManualScaleProfile) []interface{} {
+	if input == nil {
+		return []interface{}{}
+	}
+
+	result := make([]interface{}, 0)
+	for _, profile := range *input {
+		size := ""
+		if profile.Size != nil {
+			size = *profile.Size
+		}
+
+		count := 0
+		if profile.Count != nil {
+			count = int(*profile.Count)
+		}
+
+		result = append(result, map[string]interface{}{
+			"size":  size,
+			"count": count,
+		})
+	}
+
+	return result
+}
+
+func flattenAgentPoolVirtualMachineNodesStatus(input *[]agentpools.VirtualMachineNodes) []interface{} {
+	if input == nil {
+		return []interface{}{}
+	}
+
+	result := make([]interface{}, 0)
+	for _, node := range *input {
+		size := ""
+		if node.Size != nil {
+			size = *node.Size
+		}
+
+		count := 0
+		if node.Count != nil {
+			count = int(*node.Count)
+		}
+
+		result = append(result, map[string]interface{}{
+			"size":  size,
+			"count": count,
+		})
+	}
+
+	return result
 }
