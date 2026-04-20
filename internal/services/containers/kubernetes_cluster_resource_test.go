@@ -6,6 +6,7 @@ package containers_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -22,11 +23,18 @@ import (
 type KubernetesClusterResource struct{}
 
 var (
-	olderKubernetesVersion        = "1.32.9"
-	currentKubernetesVersion      = "1.33.5"
-	olderKubernetesVersionAlias   = "1.32"
-	currentKubernetesVersionAlias = "1.33"
+	olderKubernetesVersion        = testEnvOrDefault("ARM_TEST_AKS_OLDER_VERSION", "1.33")
+	currentKubernetesVersion      = testEnvOrDefault("ARM_TEST_AKS_CURRENT_VERSION", "1.34")
+	olderKubernetesVersionAlias   = testEnvOrDefault("ARM_TEST_AKS_OLDER_VERSION_ALIAS", "1.33")
+	currentKubernetesVersionAlias = testEnvOrDefault("ARM_TEST_AKS_CURRENT_VERSION_ALIAS", "1.34")
 )
+
+func testEnvOrDefault(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}
 
 func TestAccKubernetesCluster_hostEncryption(t *testing.T) {
 	data := acceptance.BuildTestData(t, "azurerm_kubernetes_cluster", "test")

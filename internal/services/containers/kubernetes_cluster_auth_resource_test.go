@@ -542,6 +542,11 @@ resource "azurerm_kubernetes_cluster" "test" {
     network_plugin    = "azure"
     load_balancer_sku = "standard"
   }
+
+  api_server_access_profile {
+    authorized_ip_ranges                = []
+    virtual_network_integration_enabled = false
+  }
 }
 `, data.RandomInteger, data.Locations.Primary, data.RandomInteger, data.RandomInteger, data.RandomInteger, data.RandomInteger)
 }

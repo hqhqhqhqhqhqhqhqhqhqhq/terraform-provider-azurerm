@@ -3720,9 +3720,9 @@ resource "azurerm_kubernetes_cluster" "test" {
   location            = azurerm_resource_group.test.location
   resource_group_name = azurerm_resource_group.test.name
   dns_prefix          = "acctestaks%[1]d"
-  kubernetes_version  = "1.32.4"
+  kubernetes_version  = %[3]q
 
-  ai_toolchain_operator_enabled = %[3]t
+  ai_toolchain_operator_enabled = %[4]t
 
   default_node_pool {
     name       = "default"
@@ -3737,5 +3737,5 @@ resource "azurerm_kubernetes_cluster" "test" {
     type = "SystemAssigned"
   }
 }
-  `, data.RandomInteger, data.Locations.Primary, enabled)
+`, data.RandomInteger, data.Locations.Primary, currentKubernetesVersion, enabled)
 }

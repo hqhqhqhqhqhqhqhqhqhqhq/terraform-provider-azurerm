@@ -348,6 +348,8 @@ func TestAccDataSourceKubernetesCluster_addOnProfileAzurePolicy(t *testing.T) {
 }
 
 func TestAccDataSourceKubernetesCluster_addOnProfileRouting(t *testing.T) {
+	t.Skip("HTTPApplicationRouting cannot be enabled on new AKS clusters; use Application Routing instead.")
+
 	data := acceptance.BuildTestData(t, "data.azurerm_kubernetes_cluster", "test")
 	r := KubernetesClusterDataSource{}
 
@@ -592,6 +594,8 @@ func TestAccDataSourceKubernetesCluster_serviceMeshCertificateAuthority(t *testi
 }
 
 func TestAccDataSourceKubernetesCluster_serviceMeshRevisions(t *testing.T) {
+	t.Skip("AKS service mesh revisions vary by region and can change; this test requires dynamic revision discovery.")
+
 	data := acceptance.BuildTestData(t, "data.azurerm_kubernetes_cluster", "test")
 	r := KubernetesClusterDataSource{}
 
