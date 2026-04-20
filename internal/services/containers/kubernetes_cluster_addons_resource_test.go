@@ -310,30 +310,29 @@ func TestAccKubernetesCluster_addonProfileServiceMeshProfile_certificateAuthorit
 }
 
 func TestAccKubernetesCluster_addonProfileServiceMeshProfile_revisions(t *testing.T) {
-	t.Skip("AKS service mesh revisions vary by region and can change; this test requires dynamic revision discovery.")
-
-	// retrieve available revisions using `az aks mesh get-revisions --location {location}`
-	// TODO: function to make the revision dynamic so we don't have to keep updating it
+	oldRevision, newRevision := serviceMeshRevisionPairForTest(t)
 	data := acceptance.BuildTestData(t, "azurerm_kubernetes_cluster", "test")
 	r := KubernetesClusterResource{}
+	oldRevisionConfig := fmt.Sprintf(`["%s"]`, oldRevision)
+	canaryRevisionConfig := fmt.Sprintf(`["%s", "%s"]`, oldRevision, newRevision)
 
 	data.ResourceTest(t, r, []acceptance.TestStep{
 		{
-			Config: r.addonProfileServiceMeshProfileRevisionsConfig(data, `["asm-1-25"]`),
+			Config: r.addonProfileServiceMeshProfileRevisionsConfig(data, oldRevisionConfig),
 			Check: acceptance.ComposeTestCheckFunc(
 				check.That(data.ResourceName).ExistsInAzure(r),
 			),
 		},
 		data.ImportStep(),
 		{
-			Config: r.addonProfileServiceMeshProfileRevisionsConfig(data, `["asm-1-25", "asm-1-26"]`),
+			Config: r.addonProfileServiceMeshProfileRevisionsConfig(data, canaryRevisionConfig),
 			Check: acceptance.ComposeTestCheckFunc(
 				check.That(data.ResourceName).ExistsInAzure(r),
 			),
 		},
 		data.ImportStep(),
 		{
-			Config: r.addonProfileServiceMeshProfileRevisionsConfig(data, `["asm-1-25"]`),
+			Config: r.addonProfileServiceMeshProfileRevisionsConfig(data, oldRevisionConfig),
 			Check: acceptance.ComposeTestCheckFunc(
 				check.That(data.ResourceName).ExistsInAzure(r),
 			),

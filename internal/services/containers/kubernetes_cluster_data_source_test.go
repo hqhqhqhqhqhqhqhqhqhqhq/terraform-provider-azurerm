@@ -594,62 +594,58 @@ func TestAccDataSourceKubernetesCluster_serviceMeshCertificateAuthority(t *testi
 }
 
 func TestAccDataSourceKubernetesCluster_serviceMeshRevisions(t *testing.T) {
-	t.Skip("AKS service mesh revisions vary by region and can change; this test requires dynamic revision discovery.")
-
+	oldRevision, newRevision := serviceMeshRevisionPairForTest(t)
 	data := acceptance.BuildTestData(t, "data.azurerm_kubernetes_cluster", "test")
 	r := KubernetesClusterDataSource{}
+	oldRevisionConfig := fmt.Sprintf(`["%s"]`, oldRevision)
+	canaryRevisionConfig := fmt.Sprintf(`["%s", "%s"]`, oldRevision, newRevision)
 
 	data.DataSourceTest(t, []acceptance.TestStep{
 		{
-			// create a cluster with an istio revision with revision currently at asm-1-25
-			Config: r.serviceMeshRevisions(data, `["asm-1-25"]`),
+			Config: r.serviceMeshRevisions(data, oldRevisionConfig),
 			Check: acceptance.ComposeTestCheckFunc(
 				check.That(data.ResourceName).Key("service_mesh_profile.0.mode").HasValue("Istio"),
 				check.That(data.ResourceName).Key("service_mesh_profile.0.internal_ingress_gateway_enabled").HasValue("false"),
 				check.That(data.ResourceName).Key("service_mesh_profile.0.external_ingress_gateway_enabled").HasValue("false"),
-				check.That(data.ResourceName).Key("service_mesh_profile.0.revisions.0").HasValue("asm-1-25"),
+				check.That(data.ResourceName).Key("service_mesh_profile.0.revisions.0").HasValue(oldRevision),
 			),
 		},
 		{
-			// start istio revision canary upgrade to asm-1-26
-			Config: r.serviceMeshRevisions(data, `["asm-1-25", "asm-1-26"]`),
+			Config: r.serviceMeshRevisions(data, canaryRevisionConfig),
 			Check: acceptance.ComposeTestCheckFunc(
 				check.That(data.ResourceName).Key("service_mesh_profile.0.mode").HasValue("Istio"),
 				check.That(data.ResourceName).Key("service_mesh_profile.0.internal_ingress_gateway_enabled").HasValue("false"),
 				check.That(data.ResourceName).Key("service_mesh_profile.0.external_ingress_gateway_enabled").HasValue("false"),
-				check.That(data.ResourceName).Key("service_mesh_profile.0.revisions.0").HasValue("asm-1-25"),
-				check.That(data.ResourceName).Key("service_mesh_profile.0.revisions.1").HasValue("asm-1-26"),
+				check.That(data.ResourceName).Key("service_mesh_profile.0.revisions.0").HasValue(oldRevision),
+				check.That(data.ResourceName).Key("service_mesh_profile.0.revisions.1").HasValue(newRevision),
 			),
 		},
 		{
-			// rollback the istio revision back to asm-1-25
-			Config: r.serviceMeshRevisions(data, `["asm-1-25"]`),
+			Config: r.serviceMeshRevisions(data, oldRevisionConfig),
 			Check: acceptance.ComposeTestCheckFunc(
 				check.That(data.ResourceName).Key("service_mesh_profile.0.mode").HasValue("Istio"),
 				check.That(data.ResourceName).Key("service_mesh_profile.0.internal_ingress_gateway_enabled").HasValue("false"),
 				check.That(data.ResourceName).Key("service_mesh_profile.0.external_ingress_gateway_enabled").HasValue("false"),
-				check.That(data.ResourceName).Key("service_mesh_profile.0.revisions.0").HasValue("asm-1-25"),
+				check.That(data.ResourceName).Key("service_mesh_profile.0.revisions.0").HasValue(oldRevision),
 			),
 		},
 		{
-			// start istio revision canary upgrade to asm-1-26
-			Config: r.serviceMeshRevisions(data, `["asm-1-25", "asm-1-26"]`),
+			Config: r.serviceMeshRevisions(data, canaryRevisionConfig),
 			Check: acceptance.ComposeTestCheckFunc(
 				check.That(data.ResourceName).Key("service_mesh_profile.0.mode").HasValue("Istio"),
 				check.That(data.ResourceName).Key("service_mesh_profile.0.internal_ingress_gateway_enabled").HasValue("false"),
 				check.That(data.ResourceName).Key("service_mesh_profile.0.external_ingress_gateway_enabled").HasValue("false"),
-				check.That(data.ResourceName).Key("service_mesh_profile.0.revisions.0").HasValue("asm-1-25"),
-				check.That(data.ResourceName).Key("service_mesh_profile.0.revisions.1").HasValue("asm-1-26"),
+				check.That(data.ResourceName).Key("service_mesh_profile.0.revisions.0").HasValue(oldRevision),
+				check.That(data.ResourceName).Key("service_mesh_profile.0.revisions.1").HasValue(newRevision),
 			),
 		},
 		{
-			// complete the istio revision upgrade to asm-1-26
-			Config: r.serviceMeshRevisions(data, `["asm-1-26"]`),
+			Config: r.serviceMeshRevisions(data, fmt.Sprintf(`["%s"]`, newRevision)),
 			Check: acceptance.ComposeTestCheckFunc(
 				check.That(data.ResourceName).Key("service_mesh_profile.0.mode").HasValue("Istio"),
 				check.That(data.ResourceName).Key("service_mesh_profile.0.internal_ingress_gateway_enabled").HasValue("false"),
 				check.That(data.ResourceName).Key("service_mesh_profile.0.external_ingress_gateway_enabled").HasValue("false"),
-				check.That(data.ResourceName).Key("service_mesh_profile.0.revisions.0").HasValue("asm-1-26"),
+				check.That(data.ResourceName).Key("service_mesh_profile.0.revisions.0").HasValue(newRevision),
 			),
 		},
 	})

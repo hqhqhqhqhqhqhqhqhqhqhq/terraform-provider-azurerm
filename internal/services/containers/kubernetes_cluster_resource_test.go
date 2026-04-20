@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,6 +35,18 @@ func testEnvOrDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func serviceMeshRevisionPairForTest(t *testing.T) (string, string) {
+	t.Helper()
+
+	oldRevision := strings.TrimSpace(os.Getenv("ARM_TEST_AKS_SERVICE_MESH_OLD_REVISION"))
+	newRevision := strings.TrimSpace(os.Getenv("ARM_TEST_AKS_SERVICE_MESH_NEW_REVISION"))
+	if oldRevision == "" || newRevision == "" {
+		t.Skip("Skipping as ARM_TEST_AKS_SERVICE_MESH_OLD_REVISION and ARM_TEST_AKS_SERVICE_MESH_NEW_REVISION are not set")
+	}
+
+	return oldRevision, newRevision
 }
 
 func TestAccKubernetesCluster_hostEncryption(t *testing.T) {
