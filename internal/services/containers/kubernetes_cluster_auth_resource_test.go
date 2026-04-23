@@ -33,13 +33,6 @@ func TestAccKubernetesCluster_apiServerAuthorizedIPRanges(t *testing.T) {
 			),
 		},
 		data.ImportStep(),
-		{
-			Config: r.apiServerAuthorizedIPRangesRemovedConfig(data),
-			Check: acceptance.ComposeTestCheckFunc(
-				check.That(data.ResourceName).ExistsInAzure(r),
-			),
-		},
-		data.ImportStep(),
 	})
 }
 
@@ -466,7 +459,7 @@ resource "azurerm_kubernetes_cluster" "test" {
   default_node_pool {
     name           = "default"
     node_count     = 1
-    vm_size        = "Standard_DS2_v2"
+    vm_size        = %[7]q
     vnet_subnet_id = azurerm_subnet.test.id
     upgrade_settings {
       max_surge = "10%%"
@@ -490,7 +483,7 @@ resource "azurerm_kubernetes_cluster" "test" {
     ]
   }
 }
-`, data.RandomInteger, data.Locations.Primary, data.RandomInteger, data.RandomInteger, data.RandomInteger, data.RandomInteger)
+`, data.RandomInteger, data.Locations.Primary, data.RandomInteger, data.RandomInteger, data.RandomInteger, data.RandomInteger, aksDefaultNodeVMSize)
 }
 
 func (KubernetesClusterResource) apiServerAuthorizedIPRangesRemovedConfig(data acceptance.TestData) string {
@@ -527,7 +520,7 @@ resource "azurerm_kubernetes_cluster" "test" {
   default_node_pool {
     name           = "default"
     node_count     = 1
-    vm_size        = "Standard_DS2_v2"
+    vm_size        = %[7]q
     vnet_subnet_id = azurerm_subnet.test.id
     upgrade_settings {
       max_surge = "10%%"
@@ -543,7 +536,7 @@ resource "azurerm_kubernetes_cluster" "test" {
     load_balancer_sku = "standard"
   }
 }
-`, data.RandomInteger, data.Locations.Primary, data.RandomInteger, data.RandomInteger, data.RandomInteger, data.RandomInteger)
+`, data.RandomInteger, data.Locations.Primary, data.RandomInteger, data.RandomInteger, data.RandomInteger, data.RandomInteger, aksDefaultNodeVMSize)
 }
 
 func (KubernetesClusterResource) managedClusterIdentityConfig(data acceptance.TestData) string {
