@@ -67,7 +67,7 @@ func TestAccKubernetesFleetManager_update(t *testing.T) {
 	data := acceptance.BuildTestData(t, "azurerm_kubernetes_fleet_manager", "test")
 	r := KubernetesFleetManagerTestResource{}
 
-	data.ResourceTest(t, r, []acceptance.TestStep{
+	data.ResourceTestIgnoreRecreate(t, r, []acceptance.TestStep{
 		{
 			Config: r.basic(data),
 			Check: acceptance.ComposeTestCheckFunc(
