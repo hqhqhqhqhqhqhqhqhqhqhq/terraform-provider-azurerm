@@ -5,6 +5,8 @@ package containers_test
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-provider-azurerm/internal/acceptance"
@@ -12,6 +14,18 @@ import (
 )
 
 var addOnAppGatewaySubnetCIDR string = "10.225.0.0/24" // Azure CNI Overlay requires AGIC subnet prefix length to be /24 or smaller
+
+func serviceMeshRevisionPairForTest(t *testing.T) (string, string) {
+	t.Helper()
+
+	oldRevision := strings.TrimSpace(os.Getenv("ARM_TEST_AKS_SERVICE_MESH_OLD_REVISION"))
+	newRevision := strings.TrimSpace(os.Getenv("ARM_TEST_AKS_SERVICE_MESH_NEW_REVISION"))
+	if oldRevision == "" || newRevision == "" {
+		t.Skip("Skipping as ARM_TEST_AKS_SERVICE_MESH_OLD_REVISION and ARM_TEST_AKS_SERVICE_MESH_NEW_REVISION are not set")
+	}
+
+	return oldRevision, newRevision
+}
 
 func TestAccKubernetesCluster_addonProfileAciConnectorLinux(t *testing.T) {
 	data := acceptance.BuildTestData(t, "azurerm_kubernetes_cluster", "test")
@@ -308,28 +322,29 @@ func TestAccKubernetesCluster_addonProfileServiceMeshProfile_certificateAuthorit
 }
 
 func TestAccKubernetesCluster_addonProfileServiceMeshProfile_revisions(t *testing.T) {
-	// retrieve available revisions using `az aks mesh get-revisions --location {location}`
-	// TODO: function to make the revision dynamic so we don't have to keep updating it
+	oldRevision, newRevision := serviceMeshRevisionPairForTest(t)
 	data := acceptance.BuildTestData(t, "azurerm_kubernetes_cluster", "test")
 	r := KubernetesClusterResource{}
+	oldRevisionConfig := fmt.Sprintf(`["%s"]`, oldRevision)
+	canaryRevisionConfig := fmt.Sprintf(`["%s", "%s"]`, oldRevision, newRevision)
 
 	data.ResourceTest(t, r, []acceptance.TestStep{
 		{
-			Config: r.addonProfileServiceMeshProfileRevisionsConfig(data, `["asm-1-25"]`),
+			Config: r.addonProfileServiceMeshProfileRevisionsConfig(data, oldRevisionConfig),
 			Check: acceptance.ComposeTestCheckFunc(
 				check.That(data.ResourceName).ExistsInAzure(r),
 			),
 		},
 		data.ImportStep(),
 		{
-			Config: r.addonProfileServiceMeshProfileRevisionsConfig(data, `["asm-1-25", "asm-1-26"]`),
+			Config: r.addonProfileServiceMeshProfileRevisionsConfig(data, canaryRevisionConfig),
 			Check: acceptance.ComposeTestCheckFunc(
 				check.That(data.ResourceName).ExistsInAzure(r),
 			),
 		},
 		data.ImportStep(),
 		{
-			Config: r.addonProfileServiceMeshProfileRevisionsConfig(data, `["asm-1-25"]`),
+			Config: r.addonProfileServiceMeshProfileRevisionsConfig(data, oldRevisionConfig),
 			Check: acceptance.ComposeTestCheckFunc(
 				check.That(data.ResourceName).ExistsInAzure(r),
 			),
