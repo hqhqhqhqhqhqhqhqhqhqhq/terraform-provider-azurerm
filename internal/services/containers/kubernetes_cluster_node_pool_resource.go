@@ -5,6 +5,7 @@ package containers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
@@ -65,6 +66,12 @@ func resourceKubernetesClusterNodePool() *pluginsdk.Resource {
 		Schema: resourceKubernetesClusterNodePoolSchema(),
 
 		CustomizeDiff: pluginsdk.CustomDiffInSequence(
+			func(ctx context.Context, d *pluginsdk.ResourceDiff, meta interface{}) error {
+				if d.Get("os_sku").(string) == string(agentpools.OSSKUWindowsTwoZeroTwoFive) && d.NewValueKnown("fips_enabled") && !d.Get("fips_enabled").(bool) {
+					return errors.New("`fips_enabled` must be `true` when `os_sku` is `Windows2025`")
+				}
+				return nil
+			},
 			pluginsdk.ForceNewIfChange("os_sku", func(ctx context.Context, old, new, meta interface{}) bool {
 				oldStr := old.(string)
 				newStr := new.(string)
@@ -304,6 +311,7 @@ func resourceKubernetesClusterNodePoolSchema() map[string]*pluginsdk.Schema {
 				string(agentpools.OSSKUUbuntuTwoFourZeroFour),
 				string(agentpools.OSSKUWindowsTwoZeroOneNine),
 				string(agentpools.OSSKUWindowsTwoZeroTwoTwo),
+				string(agentpools.OSSKUWindowsTwoZeroTwoFive),
 			}, false),
 		},
 
