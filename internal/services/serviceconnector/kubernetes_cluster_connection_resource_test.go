@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2014, 2026
 // SPDX-License-Identifier: MPL-2.0
 
 package serviceconnector_test
@@ -8,13 +8,13 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/hashicorp/go-azure-helpers/lang/pointer"
 	"github.com/hashicorp/go-azure-helpers/lang/response"
 	"github.com/hashicorp/go-azure-sdk/resource-manager/servicelinker/2024-04-01/servicelinker"
 	"github.com/hashicorp/terraform-provider-azurerm/internal/acceptance"
 	"github.com/hashicorp/terraform-provider-azurerm/internal/acceptance/check"
 	"github.com/hashicorp/terraform-provider-azurerm/internal/clients"
 	"github.com/hashicorp/terraform-provider-azurerm/internal/tf/pluginsdk"
-	"github.com/hashicorp/terraform-provider-azurerm/utils"
 )
 
 type ServiceConnectorKubernetesClusterResource struct{}
@@ -28,14 +28,14 @@ func (r ServiceConnectorKubernetesClusterResource) Exists(ctx context.Context, c
 	resp, err := client.ServiceConnector.ServiceLinkerClient.LinkerGet(ctx, *id)
 	if err != nil {
 		if response.WasNotFound(resp.HttpResponse) {
-			return utils.Bool(false), nil
+			return pointer.To(false), nil
 		}
 		return nil, fmt.Errorf("retrieving %s: %+v", *id, err)
 	}
-	return utils.Bool(true), nil
+	return pointer.To(true), nil
 }
 
-func TestAccServiceConnectorKubernetesClusterCosmosdb_secretAuth(t *testing.T) {
+func TestAccServiceConnectorKubernetesCluster_cosmosdbSecretAuth(t *testing.T) {
 	data := acceptance.BuildTestData(t, "azurerm_kubernetes_cluster_connection", "test")
 	r := ServiceConnectorKubernetesClusterResource{}
 
@@ -46,49 +46,92 @@ func TestAccServiceConnectorKubernetesClusterCosmosdb_secretAuth(t *testing.T) {
 				check.That(data.ResourceName).ExistsInAzure(r),
 			),
 		},
+		data.RequiresImportErrorStep(r.requiresImport),
 		data.ImportStep("authentication"),
 	})
 }
 
-func TestAccServiceConnectorKubernetesClusterCosmosdb_servicePrincipalSecretAuth(t *testing.T) {
+func TestAccServiceConnectorKubernetesCluster_cosmosdbServicePrincipalSecretAuth(t *testing.T) {
 	data := acceptance.BuildTestData(t, "azurerm_kubernetes_cluster_connection", "test")
 	r := ServiceConnectorKubernetesClusterResource{}
 
 	data.ResourceTest(t, r, []acceptance.TestStep{
 		{
-			Config: r.cosmosdbWithServicePrincipalSecretAuth(data),
+			Config: r.cosmosdbWithServicePrincipalSecretAuth(data, "somesecret"),
 			Check: acceptance.ComposeTestCheckFunc(
 				check.That(data.ResourceName).ExistsInAzure(r),
+			),
+		},
+		data.ImportStep("authentication"),
+		{
+			Config: r.cosmosdbWithServicePrincipalSecretAuth(data, "somesecret2"),
+			Check: acceptance.ComposeTestCheckFunc(
+				check.That(data.ResourceName).ExistsInAzure(r),
+				check.That(data.ResourceName).Key("authentication.0.secret").HasValue("somesecret2"),
 			),
 		},
 		data.ImportStep("authentication"),
 	})
 }
 
-func TestAccServiceConnectorKubernetesClusterStorageBlob_basic(t *testing.T) {
+func TestAccServiceConnectorKubernetesCluster_storageBlob(t *testing.T) {
 	data := acceptance.BuildTestData(t, "azurerm_kubernetes_cluster_connection", "test")
 	r := ServiceConnectorKubernetesClusterResource{}
 
 	data.ResourceTest(t, r, []acceptance.TestStep{
 		{
-			Config: r.storageBlob(data),
+			Config: r.storageBlob(data, ""),
 			Check: acceptance.ComposeTestCheckFunc(
 				check.That(data.ResourceName).ExistsInAzure(r),
+				check.That(data.ResourceName).Key("client_type").HasValue("none"),
+			),
+		},
+		data.ImportStep("authentication"),
+		{
+			Config: r.storageBlob(data, "java"),
+			Check: acceptance.ComposeTestCheckFunc(
+				check.That(data.ResourceName).ExistsInAzure(r),
+				check.That(data.ResourceName).Key("client_type").HasValue("java"),
+			),
+		},
+		data.ImportStep("authentication"),
+		{
+			Config: r.storageBlob(data, ""),
+			Check: acceptance.ComposeTestCheckFunc(
+				check.That(data.ResourceName).ExistsInAzure(r),
+				check.That(data.ResourceName).Key("client_type").HasValue("none"),
 			),
 		},
 		data.ImportStep("authentication"),
 	})
 }
 
-func TestAccServiceConnectorKubernetesClusterStorageBlob_secretStore(t *testing.T) {
+func TestAccServiceConnectorKubernetesCluster_secretStore(t *testing.T) {
 	data := acceptance.BuildTestData(t, "azurerm_kubernetes_cluster_connection", "test")
 	r := ServiceConnectorKubernetesClusterResource{}
 
 	data.ResourceTest(t, r, []acceptance.TestStep{
 		{
-			Config: r.secretStore(data),
+			Config: r.secretStore(data, true),
 			Check: acceptance.ComposeTestCheckFunc(
 				check.That(data.ResourceName).ExistsInAzure(r),
+				check.That(data.ResourceName).Key("secret_store.#").HasValue("1"),
+			),
+		},
+		data.ImportStep("authentication"),
+		{
+			Config: r.secretStore(data, false),
+			Check: acceptance.ComposeTestCheckFunc(
+				check.That(data.ResourceName).ExistsInAzure(r),
+				check.That(data.ResourceName).Key("secret_store.#").HasValue("0"),
+			),
+		},
+		data.ImportStep("authentication"),
+		{
+			Config: r.secretStore(data, true),
+			Check: acceptance.ComposeTestCheckFunc(
+				check.That(data.ResourceName).ExistsInAzure(r),
+				check.That(data.ResourceName).Key("secret_store.#").HasValue("1"),
 			),
 		},
 		data.ImportStep("authentication"),
@@ -101,16 +144,37 @@ func TestAccServiceConnectorKubernetesCluster_complete(t *testing.T) {
 
 	data.ResourceTest(t, r, []acceptance.TestStep{
 		{
-			Config: r.complete(data),
+			Config: r.complete(data, "privateLink"),
 			Check: acceptance.ComposeTestCheckFunc(
 				check.That(data.ResourceName).ExistsInAzure(r),
+				check.That(data.ResourceName).Key("vnet_solution").HasValue("privateLink"),
+			),
+		},
+		data.ImportStep("authentication"),
+		{
+			Config: r.complete(data, ""),
+			Check: acceptance.ComposeTestCheckFunc(
+				check.That(data.ResourceName).ExistsInAzure(r),
+				check.That(data.ResourceName).Key("vnet_solution").HasValue(""),
+			),
+		},
+		data.ImportStep("authentication"),
+		{
+			Config: r.complete(data, "privateLink"),
+			Check: acceptance.ComposeTestCheckFunc(
+				check.That(data.ResourceName).ExistsInAzure(r),
+				check.That(data.ResourceName).Key("vnet_solution").HasValue("privateLink"),
 			),
 		},
 		data.ImportStep("authentication"),
 	})
 }
 
-func (r ServiceConnectorKubernetesClusterResource) storageBlob(data acceptance.TestData) string {
+func (r ServiceConnectorKubernetesClusterResource) storageBlob(data acceptance.TestData, clientType string) string {
+	clientTypeConfig := ""
+	if clientType != "" {
+		clientTypeConfig = fmt.Sprintf("client_type = %q", clientType)
+	}
 	return fmt.Sprintf(`
 provider "azurerm" {
   features {}
@@ -135,10 +199,14 @@ resource "azurerm_kubernetes_cluster" "test" {
   resource_group_name = azurerm_resource_group.test.name
   dns_prefix          = "acctestaks%[3]d"
 
+  node_provisioning_profile {
+    mode = "Manual"
+  }
+
   default_node_pool {
     name       = "default"
-    node_count = 1
-    vm_size    = "standard_a2_v2"
+    node_count = 2
+    vm_size    = "Standard_D4s_v5"
 
     upgrade_settings {
       max_surge                     = "10%%"
@@ -156,13 +224,14 @@ resource "azurerm_kubernetes_cluster_connection" "test" {
   name                  = "acctestserviceconnector%[3]d"
   kubernetes_cluster_id = azurerm_kubernetes_cluster.test.id
   target_resource_id    = azurerm_storage_account.test.id
+  %[4]s
   authentication {
     type   = "secret"
     name   = "foo"
     secret = "bar"
   }
 }
-`, data.Locations.Primary, data.RandomString, data.RandomInteger)
+`, data.Locations.Primary, data.RandomString, data.RandomInteger, clientTypeConfig)
 }
 
 func (r ServiceConnectorKubernetesClusterResource) cosmosdbWithSecretAuth(data acceptance.TestData) string {
@@ -183,7 +252,25 @@ resource "azurerm_kubernetes_cluster_connection" "test" {
 `, template, data.RandomInteger)
 }
 
-func (r ServiceConnectorKubernetesClusterResource) cosmosdbWithServicePrincipalSecretAuth(data acceptance.TestData) string {
+func (r ServiceConnectorKubernetesClusterResource) requiresImport(data acceptance.TestData) string {
+	return fmt.Sprintf(`
+%s
+
+resource "azurerm_kubernetes_cluster_connection" "import" {
+  name                  = azurerm_kubernetes_cluster_connection.test.name
+  kubernetes_cluster_id = azurerm_kubernetes_cluster_connection.test.kubernetes_cluster_id
+  target_resource_id    = azurerm_kubernetes_cluster_connection.test.target_resource_id
+
+  authentication {
+    type   = "secret"
+    name   = "foo"
+    secret = "bar"
+  }
+}
+`, r.cosmosdbWithSecretAuth(data))
+}
+
+func (r ServiceConnectorKubernetesClusterResource) cosmosdbWithServicePrincipalSecretAuth(data acceptance.TestData, secret string) string {
 	template := r.template(data)
 	return fmt.Sprintf(`
 %[1]s
@@ -202,13 +289,21 @@ resource "azurerm_kubernetes_cluster_connection" "test" {
     type         = "servicePrincipalSecret"
     client_id    = "someclientid"
     principal_id = azurerm_user_assigned_identity.test.principal_id
-    secret       = "somesecret"
+    secret       = %[4]q
   }
 }
-`, template, data.RandomString, data.RandomInteger)
+`, template, data.RandomString, data.RandomInteger, secret)
 }
 
-func (r ServiceConnectorKubernetesClusterResource) secretStore(data acceptance.TestData) string {
+func (r ServiceConnectorKubernetesClusterResource) secretStore(data acceptance.TestData, enabled bool) string {
+	secretStoreConfig := ""
+	if enabled {
+		secretStoreConfig = `
+  secret_store {
+    key_vault_id = azurerm_key_vault.test.id
+  }
+`
+	}
 	return fmt.Sprintf(`
 provider "azurerm" {
   features {
@@ -241,10 +336,14 @@ resource "azurerm_kubernetes_cluster" "test" {
   resource_group_name = azurerm_resource_group.test.name
   dns_prefix          = "acctestaks%[2]d"
 
+  node_provisioning_profile {
+    mode = "Manual"
+  }
+
   default_node_pool {
     name       = "default"
-    node_count = 1
-    vm_size    = "standard_a2_v2"
+    node_count = 2
+    vm_size    = "Standard_D4s_v5"
 
     upgrade_settings {
       max_surge                     = "10%%"
@@ -263,12 +362,13 @@ resource "azurerm_kubernetes_cluster" "test" {
 }
 
 resource "azurerm_key_vault" "test" {
-  name                     = "accAKV-%[4]s"
-  location                 = azurerm_resource_group.test.location
-  resource_group_name      = azurerm_resource_group.test.name
-  tenant_id                = data.azurerm_client_config.current.tenant_id
-  sku_name                 = "standard"
-  purge_protection_enabled = true
+  name                       = "accAKV-%[4]s"
+  location                   = azurerm_resource_group.test.location
+  resource_group_name        = azurerm_resource_group.test.name
+  tenant_id                  = data.azurerm_client_config.current.tenant_id
+  sku_name                   = "standard"
+  rbac_authorization_enabled = false
+  purge_protection_enabled   = true
 }
 
 resource "azurerm_kubernetes_cluster_connection" "test" {
@@ -277,19 +377,21 @@ resource "azurerm_kubernetes_cluster_connection" "test" {
   target_resource_id    = azurerm_storage_account.test.id
   client_type           = "java"
 
-  secret_store {
-    key_vault_id = azurerm_key_vault.test.id
-  }
+  %[5]s
   authentication {
     type   = "secret"
     name   = "foo"
     secret = "bar"
   }
 }
-`, data.Locations.Primary, data.RandomInteger, data.RandomInteger, data.RandomString)
+`, data.Locations.Primary, data.RandomInteger, data.RandomInteger, data.RandomString, secretStoreConfig)
 }
 
-func (r ServiceConnectorKubernetesClusterResource) complete(data acceptance.TestData) string {
+func (r ServiceConnectorKubernetesClusterResource) complete(data acceptance.TestData, vnetSolution string) string {
+	vnetSolutionConfig := ""
+	if vnetSolution != "" {
+		vnetSolutionConfig = fmt.Sprintf("vnet_solution = %q", vnetSolution)
+	}
 	return fmt.Sprintf(`
 provider "azurerm" {
   features {}
@@ -340,10 +442,14 @@ resource "azurerm_kubernetes_cluster" "test" {
   resource_group_name = azurerm_resource_group.test.name
   dns_prefix          = "acctestaks%[2]d"
 
+  node_provisioning_profile {
+    mode = "Manual"
+  }
+
   default_node_pool {
     name       = "default"
-    node_count = 1
-    vm_size    = "standard_a2_v2"
+    node_count = 2
+    vm_size    = "Standard_D4s_v5"
 
     upgrade_settings {
       max_surge                     = "10%%"
@@ -362,14 +468,14 @@ resource "azurerm_kubernetes_cluster_connection" "test" {
   kubernetes_cluster_id = azurerm_kubernetes_cluster.test.id
   target_resource_id    = azurerm_cosmosdb_sql_database.test.id
   client_type           = "java"
-  vnet_solution         = "privateLink"
+  %[5]s
   authentication {
     type   = "secret"
     name   = "foo"
     secret = "bar"
   }
 }
-`, data.Locations.Primary, data.RandomInteger, data.RandomInteger, data.RandomString)
+`, data.Locations.Primary, data.RandomInteger, data.RandomInteger, data.RandomString, vnetSolutionConfig)
 }
 
 func (r ServiceConnectorKubernetesClusterResource) template(data acceptance.TestData) string {
@@ -423,10 +529,14 @@ resource "azurerm_kubernetes_cluster" "test" {
   resource_group_name = azurerm_resource_group.test.name
   dns_prefix          = "acctestaks%[2]d"
 
+  node_provisioning_profile {
+    mode = "Manual"
+  }
+
   default_node_pool {
     name       = "default"
-    node_count = 1
-    vm_size    = "standard_a2_v2"
+    node_count = 2
+    vm_size    = "Standard_D4s_v5"
 
     upgrade_settings {
       max_surge                     = "10%%"

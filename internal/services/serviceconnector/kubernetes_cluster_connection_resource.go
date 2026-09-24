@@ -1,4 +1,4 @@
-// Copyright (c) HashiCorp, Inc.
+// Copyright IBM Corp. 2014, 2026
 // SPDX-License-Identifier: MPL-2.0
 
 package serviceconnector
@@ -6,6 +6,7 @@ package serviceconnector
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/go-azure-helpers/lang/pointer"
@@ -55,6 +56,10 @@ func (r KubernetesClusterConnectorResource) Arguments() map[string]*schema.Schem
 			Required:     true,
 			ForceNew:     true,
 			ValidateFunc: azure.ValidateResourceID,
+			DiffSuppressFunc: func(_, old, new string, _ *pluginsdk.ResourceData) bool {
+				return normalizeKubernetesClusterConnectionTargetID(old) == normalizeKubernetesClusterConnectionTargetID(new)
+			},
+			DiffSuppressOnRefresh: true,
 		},
 
 		"client_type": {
@@ -78,12 +83,9 @@ func (r KubernetesClusterConnectorResource) Arguments() map[string]*schema.Schem
 		"secret_store": secretStoreSchema(),
 
 		"vnet_solution": {
-			Type:     pluginsdk.TypeString,
-			Optional: true,
-			ValidateFunc: validation.StringInSlice([]string{
-				string(servicelinker.VNetSolutionTypeServiceEndpoint),
-				string(servicelinker.VNetSolutionTypePrivateLink),
-			}, false),
+			Type:         pluginsdk.TypeString,
+			Optional:     true,
+			ValidateFunc: validation.StringInSlice(servicelinker.PossibleValuesForVNetSolutionType(), false),
 		},
 
 		"authentication": authInfoSchema(),
@@ -114,13 +116,15 @@ func (r KubernetesClusterConnectorResource) Create() sdk.ResourceFunc {
 			client := metadata.Client.ServiceConnector.ServiceLinkerClient
 
 			id := servicelinker.NewScopedLinkerID(model.KubernetesClusterId, model.Name)
-			existing, err := client.LinkerGet(ctx, id)
-			if err != nil && !response.WasNotFound(existing.HttpResponse) {
-				return fmt.Errorf("checking for presence of existing %s: %+v", id, err)
-			}
+			if !metadata.Client.Features.SkipImportCheckOnCreateAndAllowOverwritingExistingResources {
+				existing, err := client.LinkerGet(ctx, id)
+				if err != nil && !response.WasNotFound(existing.HttpResponse) {
+					return fmt.Errorf("checking for presence of existing %s: %+v", id, err)
+				}
 
-			if !response.WasNotFound(existing.HttpResponse) {
-				return metadata.ResourceRequiresImport(r.ResourceType(), id)
+				if !response.WasNotFound(existing.HttpResponse) {
+					return metadata.ResourceRequiresImport(r.ResourceType(), id)
+				}
 			}
 
 			authInfo, err := expandServiceConnectorAuthInfoForCreate(model.AuthInfo)
@@ -144,19 +148,16 @@ func (r KubernetesClusterConnectorResource) Create() sdk.ResourceFunc {
 			}
 
 			if model.SecretStore != nil {
-				secretStore := expandSecretStore(model.SecretStore)
-				serviceConnectorProperties.SecretStore = secretStore
+				serviceConnectorProperties.SecretStore = expandSecretStore(model.SecretStore)
 			}
 
 			if model.ClientType != "" {
-				clientType := servicelinker.ClientType(model.ClientType)
-				serviceConnectorProperties.ClientType = &clientType
+				serviceConnectorProperties.ClientType = pointer.ToEnum[servicelinker.ClientType](model.ClientType)
 			}
 
 			if model.VnetSolution != "" {
-				vNetSolutionType := servicelinker.VNetSolutionType(model.VnetSolution)
 				vNetSolution := servicelinker.VNetSolution{
-					Type: &vNetSolutionType,
+					Type: pointer.ToEnum[servicelinker.VNetSolutionType](model.VnetSolution),
 				}
 				serviceConnectorProperties.VNetSolution = &vNetSolution
 			}
@@ -206,8 +207,11 @@ func (r KubernetesClusterConnectorResource) Read() sdk.ResourceFunc {
 				state := KubernetesClusterConnectorResourceModel{
 					Name:                id.LinkerName,
 					KubernetesClusterId: id.ResourceUri,
-					TargetResourceId:    flattenTargetService(props.TargetService),
 					AuthInfo:            flattenServiceConnectorAuthInfo(props.AuthInfo, pwd),
+				}
+
+				if target, ok := props.TargetService.(servicelinker.AzureResource); ok && target.Id != nil {
+					state.TargetResourceId = normalizeKubernetesClusterConnectionTargetID(*target.Id)
 				}
 
 				if props.ClientType != nil {
@@ -239,8 +243,6 @@ func (r KubernetesClusterConnectorResource) Delete() sdk.ResourceFunc {
 				return err
 			}
 
-			metadata.Logger.Infof("deleting %s", *id)
-
 			if err := client.LinkerDeleteThenPoll(ctx, *id); err != nil {
 				return fmt.Errorf("deleting %s: %+v", *id, err)
 			}
@@ -269,20 +271,22 @@ func (r KubernetesClusterConnectorResource) Update() sdk.ResourceFunc {
 			linkerProps := links.LinkerProperties{}
 
 			if d.HasChange("client_type") {
-				clientType := links.ClientType(state.ClientType)
-				linkerProps.ClientType = &clientType
+				linkerProps.ClientType = pointer.ToEnum[links.ClientType](state.ClientType)
 			}
 
 			if d.HasChange("vnet_solution") {
-				vnetSolutionType := links.VNetSolutionType(state.VnetSolution)
 				vnetSolution := links.VNetSolution{
-					Type: &vnetSolutionType,
+					Type: pointer.ToEnum[links.VNetSolutionType](state.VnetSolution),
 				}
 				linkerProps.VNetSolution = &vnetSolution
 			}
 
 			if d.HasChange("secret_store") {
-				linkerProps.SecretStore = pointer.To(links.SecretStore{KeyVaultId: expandSecretStore(state.SecretStore).KeyVaultId})
+				secretStore := links.SecretStore{}
+				if expanded := expandSecretStore(state.SecretStore); expanded != nil {
+					secretStore.KeyVaultId = expanded.KeyVaultId
+				}
+				linkerProps.SecretStore = &secretStore
 			}
 
 			if d.HasChange("authentication") {
@@ -308,5 +312,31 @@ func (r KubernetesClusterConnectorResource) Update() sdk.ResourceFunc {
 }
 
 func (r KubernetesClusterConnectorResource) IDValidationFunc() pluginsdk.SchemaValidateFunc {
-	return servicelinker.ValidateScopedLinkerID
+	return func(val interface{}, key string) (warns []string, errs []error) {
+		idRaw, ok := val.(string)
+		if !ok {
+			errs = append(errs, fmt.Errorf("expected `id` to be a string but got %+v", val))
+			return
+		}
+
+		id, err := servicelinker.ParseScopedLinkerID(idRaw)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("parsing %q: %+v", idRaw, err))
+			return
+		}
+
+		if _, err := commonids.ParseKubernetesClusterID(id.ResourceUri); err != nil {
+			errs = append(errs, fmt.Errorf("parsing %q as a Kubernetes Cluster ID: %+v", id.ResourceUri, err))
+			return
+		}
+
+		return
+	}
+}
+
+func normalizeKubernetesClusterConnectionTargetID(input string) string {
+	if id, err := commonids.ParseStorageAccountID(strings.TrimSuffix(input, "/blobServices/default")); err == nil {
+		return id.ID()
+	}
+	return input
 }
